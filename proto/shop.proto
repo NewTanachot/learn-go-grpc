@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+option go_package = "github.com/NewTanachot/learn-go-grpc";
+
+message OrderArray {
+    repeated string id = 1;
+}
+
+message Order {
+    string id = 1;
+}
+
+message Product {
+    string id = 1;
+    string name = 2;
+    string description = 3;
+    string picture = 4;
+}
+
+service Transfer {
+    rpc GetProduct (Order) returns (Product) {}
+    rpc StreamProduct (OrderArray) returns (stream Product) {}
+    rpc StreamOrder (stream Order) returns (Product) {}
+    rpc StreamAll (stream Order) returns (stream Product) {}
+}
