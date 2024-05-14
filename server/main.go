@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -68,6 +69,63 @@ func (s *server) GetProduct(ctx context.Context, in *pb.Order) (*pb.Product, err
 	return s.Products[in.Id], nil
 }
 
+func (s *server) StreamProduct(in *pb.OrderArray, stream pb.Transfer_StreamProductServer) error {
+	for i := range in.Id {
+		if s.Products[in.Id[i]] != nil {
+			if err := stream.Send(s.Products[in.Id[i]]); err != nil {
+				log.Println(err.Error())
+				return fmt.Errorf(err.Error())
+			}
+			fmt.Printf("product_id: %s has been streamed\n", s.Products[in.Id[i]].Id)
+		}
+		time.Sleep(time.Second * 1)
+	}
+	return nil
+}
+
+func (s *server) StreamOrder(stream pb.Transfer_StreamOrderServer) error {
+	for {
+		orderId, err := stream.Recv()
+		if err == io.EOF {
+			log.Println("stream success!")
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		if s.Products[orderId.Id] != nil {
+			printStructJSON(s.Products[orderId.Id])
+		} else {
+			msg := fmt.Sprintf("error, product: %v not found", orderId.Id)
+			log.Println(msg)
+			return fmt.Errorf(msg)
+		}
+	}
+	return nil
+}
+
+func (s *server) StreamAll(stream pb.Transfer_StreamAllServer) error {
+	for {
+		orderId, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+
+		if s.Products[orderId.Id] != nil {
+			printStructJSON(s.Products[orderId.Id])
+			stream.Send(s.Products[orderId.Id])
+		} else {
+			msg := fmt.Sprintf("error, product: %v not found", orderId.Id)
+			log.Println(msg)
+			return fmt.Errorf(msg)
+		}
+	}
+}
+
 func main() {
 	// Load env
 	if err := godotenv.Load(".env"); err != nil {
@@ -78,8 +136,8 @@ func main() {
 		Port: flag.String("port", os.Getenv("PORT"), "The server port"),
 	}
 
-	fmt.Println(*cfg.Host)
-	fmt.Println(*cfg.Port)
+	// fmt.Println(*cfg.Host)
+	// fmt.Println(*cfg.Port)
 
 	flag.Parse()
 	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%s", *cfg.Host, *cfg.Port))
